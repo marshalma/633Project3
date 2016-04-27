@@ -53,8 +53,11 @@ def KNN(x, d, input, k)
     dists.sort! {|a,b| a[1]<=>b[1]}
     stat = {}
     (0..k-1).each do |i|
-      stat[d[dists[i][0]]] = 1 if !(stat.has_key? d[dists[i][0]])
-      stat[d[dists[i][0]]] += 1 if stat.has_key? d[dists[i][0]]
+      if stat.has_key?(d[dists[i][0]])
+        stat[d[dists[i][0]]] += 1
+      else
+        stat[d[dists[i][0]]] = 1
+      end
     end
     max = -Float::INFINITY
     stat.values.each do |value|
@@ -65,8 +68,28 @@ def KNN(x, d, input, k)
   return output
 end
 
-def KNN_DW(x, d, input, k)
-
+def KNN_DW(x, d, input, k=x[0].size)
+  output = []
+  input.each do |inp|
+    dists = []
+    x.each_with_index do |item,i|
+      dists<< [i, dist(item, inp)]
+    end
+    stat = {}
+    (0..k-1).each do |i|
+      if stat.has_key?(d[dists[i][0]])
+        stat[d[dists[i][0]]] += 1/dists[i][1]**2
+      else
+        stat[d[dists[i][0]]] = 1/dists[i][1]**2
+      end
+    end
+    max = -Float::INFINITY
+    stat.values.each do |value|
+      max = value if max < value
+    end
+    output << stat.key(max)
+  end
+  return output
 end
 
 def NTgrowth()
@@ -97,7 +120,8 @@ normalize!(x, min_max)
 
 target,input = preprocess('./datasets/ForestTypes/testing.csv', 0)
 normalize!(input, min_max)
-target_est = KNN(x,d,input,10)
+# target_est = KNN(x,d,input,10)
+target_est = KNN_DW(x,d,input)
 puts target_est.to_s
 puts target.to_s
 puts accuracy(target, target_est)
