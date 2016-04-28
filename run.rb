@@ -5,7 +5,7 @@ require 'pry'
 require 'matrix'
 
 def preprocess(filename, class_value_index)
-  raw_data = CSV.read(filename)
+  raw_data = CSV.read(filename).shuffle
   d = []
   x = []
   class_values = {}
@@ -169,32 +169,55 @@ def linear_trans(x,trans)
   return (Matrix.rows(trans) * Matrix.rows(x).transpose).transpose.to_a
 end
 
+def ten_fold_decomposition(x,d,iter)
+  n = x.size
+  train_x = []; train_t = []; test_x = []; test_t = []
+  (0..n-1).each do |i|
+    if i>=iter*n/10 && i<(iter+1)*n/10
+      test_x << x[i]
+      test_t << d[i]
+      next
+    end
+    train_x << x[i]
+    train_t << d[i]
+  end
+  return [train_x, train_t, test_x, test_t]
+end
 
 # main proc
 d,x,class_values = preprocess('./datasets/ForestTypes/training.csv', 0)
-target,input = preprocess('./datasets/ForestTypes/testing.csv', 0)
+
+(0..9).each do |iter|
+  puts "---#{iter+1}/10s fold cross validation:"
+
+  train_x, train_t, test_x, test_t = ten_fold_decomposition(x,d,iter)
+
+  min_max = find_min_max(train_x)
+  normalize!(train_x, min_max)
+  normalize!(test_x, min_max)
 
 
-min_max = find_min_max(x)
-normalize!(x, min_max)
-normalize!(input, min_max)
+  test_t_est = KNN(train_x,train_t,test_x,10)
+  # target_est = KNN_DW(x,d,input)
+  puts "KNN accuracy: " + accuracy(test_t, test_t_est).round(2).to_s
 
 
-target_est = KNN(x,d,input,10)
-# target_est = KNN_DW(x,d,input)
-puts "KNN accuracy: " + accuracy(target, target_est).round(2).to_s
+  pca = PCA(train_x, test_x, 0.95)
+  train_x_tran = linear_trans(train_x,pca)
+  test_x_tran = linear_trans(test_x,pca)
+  min_max_tran = find_min_max(train_x_tran)
+
+  normalize! train_x_tran, min_max_tran
+  normalize! test_x_tran, min_max_tran
+
+  test_t_est = KNN(train_x_tran,train_t,test_x_tran,10)
+  puts "KNN with PCA accuracy: " + accuracy(test_t, test_t_est).round(2).to_s + "\n\n\n"
+end
 
 
-pca = PCA(x, input, 0.90)
-x_tran = linear_trans(x,pca)
-input_tran = linear_trans(input,pca)
-min_max_tran = find_min_max(x_tran)
 
-normalize! x_tran, min_max_tran
-normalize! input_tran, min_max_tran
 
-target_est = KNN(x_tran,d,input_tran,5)
-puts "KNN with PCA accuracy: " + accuracy(target_est, target).round(2).to_s
+
 
 
 # # tests
