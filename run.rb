@@ -1,5 +1,8 @@
+#!/usr/local/bin/ruby
+
 require 'csv'
 require 'pry'
+require 'matrix'
 
 def preprocess(filename, class_value_index)
   raw_data = CSV.read(filename)
@@ -37,8 +40,9 @@ end
 def normalize!(data, min_max)
   min_max.each_with_index do |item, index|
     data.each {|d| d[index] = 0} if item[0] == item[1]
+    mid = (item[0] + item[1])/2
     data.each do |d|
-      d[index] = (d[index] - item[0]) / (item[1] - item[0])
+      d[index] = 2 * (d[index] - mid) / (item[1] - item[0])
     end
   end
 end
@@ -95,7 +99,32 @@ end
 def NTgrowth()
 end
 
-def PCA(x)
+def PCA(x, t, threshold = 0.9)
+  c = mean(x)
+  trans_to_center! x,c
+  trans_to_center! t,c
+  x_mat = Matrix.rows(x)
+  x_cov = x_mat.transpose * x_mat
+  eigen_vec, eigen_mat = x_cov.eigen
+  eigen_vec_a = eigen_vec.transpose.to_a
+  eigen_values_with_vec = []
+  eigen_mat.each_with_index :diagonal do |v,i|
+    eigen_values_with_vec << [v, eigen_vec_a[i]]
+  end
+
+  eigen_values_with_vec.sort! {|a,b| b[0] <=> a[0]}
+  sum_variance = 0.0
+  eigen_values_with_vec.each do |item|
+    sum_variance += item[0]
+  end
+  pc = []
+  sum_cur = 0
+  eigen_values_with_vec.each_with_index do |item|
+    sum_cur += item[0]
+    pc << item[1]
+    break if (sum_cur >= threshold * sum_variance)
+  end
+  return pc
 end
 
 def dist(x1,x2)
@@ -114,14 +143,65 @@ def accuracy(x1,x2)
   return match.to_f/n.to_f
 end
 
+def mean(x)
+  n = x.size
+  d = x[0].size
+  result = []
+  (0..d-1).each do |i|
+    sum = 0
+    x.each do |item|
+      sum += item[i]
+    end
+    result << sum.to_f / n.to_f
+  end
+  return result
+end
+
+def trans_to_center!(x,c)
+  x.each do |item|
+    c.each_with_index do |v, i|
+      item[i] -= v
+    end
+  end
+end
+
+def linear_trans(x,trans)
+  return (Matrix.rows(trans) * Matrix.rows(x).transpose).transpose.to_a
+end
+
+
+# main proc
 d,x,class_values = preprocess('./datasets/ForestTypes/training.csv', 0)
+target,input = preprocess('./datasets/ForestTypes/testing.csv', 0)
+
+
 min_max = find_min_max(x)
 normalize!(x, min_max)
-
-target,input = preprocess('./datasets/ForestTypes/testing.csv', 0)
 normalize!(input, min_max)
-# target_est = KNN(x,d,input,10)
-target_est = KNN_DW(x,d,input)
-puts target_est.to_s
-puts target.to_s
-puts accuracy(target, target_est)
+
+
+target_est = KNN(x,d,input,10)
+# target_est = KNN_DW(x,d,input)
+puts "KNN accuracy: " + accuracy(target, target_est).round(2).to_s
+
+
+pca = PCA(x, input, 0.90)
+x_tran = linear_trans(x,pca)
+input_tran = linear_trans(input,pca)
+min_max_tran = find_min_max(x_tran)
+
+normalize! x_tran, min_max_tran
+normalize! input_tran, min_max_tran
+
+target_est = KNN(x_tran,d,input_tran,5)
+puts "KNN with PCA accuracy: " + accuracy(target_est, target).round(2).to_s
+
+
+# # tests
+# # integral test for transformation to origin
+# x = [[-1,-1,-1],[0,0,0],[1,1,1],[0,1,0]]
+# trans_to_center! x, mean(x)
+# puts x.to_s
+#
+# # unit test for PCA
+# puts PCA(x).to_s
